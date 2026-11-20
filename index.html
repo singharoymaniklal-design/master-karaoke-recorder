@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+stopBtn.onclick = () => {
+  recorder.stop();
+  recordBtn.disabled = false;
+  stopBtn.disabled = true;
+};
+
+downloadBtn.onclick = () => {
+  const link = document.createElement("a");
+  link.href = playback.src;
+  link.download = "my-recording.webm";
+  link.click();
+};
+</script>
+
+</body>
+</html>
+
+HTML
