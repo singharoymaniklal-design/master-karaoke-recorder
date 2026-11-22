@@ -1,11 +1,4 @@
 <!DOCTYPE html>
-stopBtn.onclick = () => {
-  recorder.stop();
-  recordBtn.disabled = false;
-  stopBtn.disabled = true;
-};
-
-<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -20,65 +13,49 @@ body {
   text-align: center;
   padding: 15px;
 }
-
-h1 {
-  color: gold;
-}
-
+h1 { color: gold; }
 video {
   width: 100%;
   max-width: 600px;
   border-radius: 10px;
-  margin: 15px 0;
 }
-
 button {
-  padding: 14px 22px;
+  padding: 13px 20px;
   margin: 7px;
   border: none;
-  border-radius: 8px;
-  font-size: 17px;
+  border-radius: 7px;
+  font-size: 16px;
   font-weight: bold;
-  cursor: pointer;
 }
-
 #recordBtn { background: #e53935; color: white; }
 #stopBtn { background: #555; color: white; }
-#playBtn { background: #2196f3; color: white; }
-#downloadBtn { background: #2e9d50; color: white; }
-
-button:disabled {
-  opacity: 0.4;
-}
-
+#saveBtn { background: #168a45; color: white; }
+#deleteBtn { background: #b3261e; color: white; }
+#status { color: gold; margin: 18px; }
 audio {
   width: 100%;
   margin-top: 15px;
-}
-
-#status {
-  color: gold;
-  margin: 15px;
 }
 </style>
 </head>
 
 <body>
 
-<h1>MASTER KARAOKE</h1>
-<p>Sing Along & Record Your Voice</p>
+<h1>MASTER KARAOKE RECORDER</h1>
 
-<video id="karaokeVideo" controls playsinline>
+<p>Play your karaoke and record your voice.</p>
+
+<video id="karaoke" controls playsinline>
   <source src="karaoke.mp4" type="video/mp4">
   Your browser does not support video.
 </video>
 
-<br>
+<br><br>
 
-<button id="recordBtn">RECORD</button>
-<button id="stopBtn" disabled>STOP</button>
+[x] <button id="recordBtn"> RECORD</button>
+<button id="stopBtn" disabled>■ STOP</button>
 
-<p id="status">Ready to Record</p>
+<p id="status">Ready to record your performance.</p>
 
 <h3>Your Recording</h3>
 
@@ -86,94 +63,76 @@ audio {
 
 <br>
 
-<button id="downloadBtn" disabled>
-DOWNLOAD RECORDING
-</button>
+<button id="saveBtn" disabled>⬇ SAVE RECORDING</button>
+<button id="deleteBtn" disabled>DELETE</button>
 
 <script>
-
-const video = document.getElementById("karaokeVideo");
+const video = document.getElementById("karaoke");
 const recordBtn = document.getElementById("recordBtn");
 const stopBtn = document.getElementById("stopBtn");
-const downloadBtn = document.getElementById("downloadBtn");
+const saveBtn = document.getElementById("saveBtn");
+const deleteBtn = document.getElementById("deleteBtn");
 const playback = document.getElementById("playback");
-const statusText = document.getElementById("status");
+const status = document.getElementById("status");
 
 let recorder;
-let microphone;
+let micStream;
 let audioContext;
-let recordedChunks = [];
+let recordingBlob = null;
 let recordingURL = null;
+let hasRecording = false;
 
-recordBtn.onclick = async function() {
+async function startRecording() {
+
+  if (hasRecording) {
+    const answer = confirm(
+      "Your previous recording is not saved. Start a new recording and lose the previous one?"
+    );
+    if (!answer) return;
+  }
 
   try {
-
-    microphone = await navigator.mediaDevices.getUserMedia({
+    micStream = await navigator.mediaDevices.getUserMedia({
       audio: true
     });
 
     audioContext = new AudioContext();
 
+    const destination = audioContext.createMediaStreamDestination();
+
+    const musicSource = audioContext.createMediaElementSource(video);
+    const micSource = audioContext.createMediaStreamSource(micStream);
+
+    musicSource.connect(audioContext.destination);
+    musicSource.connect(destination);
+    micSource.connect(destination);
+
     await audioContext.resume();
 
-    const musicSource =
-      audioContext.createMediaElementSource(video);
+    recorder = new MediaRecorder(destination.stream);
+    const chunks = [];
 
-    const micSource =
-      audioContext.createMediaStreamSource(microphone);
-
-    const musicGain = audioContext.createGain();
-    const micGain = audioContext.createGain();
-
-    const output = audioContext.createMediaStreamDestination();
-
-    musicGain.gain.value = 1;
-    micGain.gain.value = 1;
-
-    musicSource.connect(musicGain);
-    musicGain.connect(output);
-    musicGain.connect(audioContext.destination);
-
-    micSource.connect(micGain);
-    micGain.connect(output);
-
-    recordedChunks = [];
-
-    let options = {};
-
-    if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-      options.mimeType = "audio/webm;codecs=opus";
-    }
-
-    recorder = new MediaRecorder(output.stream, options);
-
-    recorder.ondataavailable = function(event) {
-      if (event.data.size > 0) {
-        recordedChunks.push(event.data);
-      }
+    recorder.ondataavailable = event => {
+      if (event.data.size > 0) chunks.push(event.data);
     };
 
-    recorder.onstop = function() {
-
-      const blob = new Blob(recordedChunks, {
+    recorder.onstop = () => {
+      recordingBlob = new Blob(chunks, {
         type: recorder.mimeType || "audio/webm"
       });
 
-      if (recordingURL) {
-        URL.revokeObjectURL(recordingURL);
-      }
+      if (recordingURL) URL.revokeObjectURL(recordingURL);
 
-      recordingURL = URL.createObjectURL(blob);
-
+      recordingURL = URL.createObjectURL(recordingBlob);
       playback.src = recordingURL;
 
-      downloadBtn.disabled = false;
+      hasRecording = true;
+      saveBtn.disabled = false;
+      deleteBtn.disabled = false;
 
-      statusText.textContent = "Recording Completed!";
+      status.textContent = "Recording ready. Listen or save it.";
 
-      microphone.getTracks().forEach(track => track.stop());
-
+      micStream.getTracks().forEach(track => track.stop());
       audioContext.close();
     };
 
@@ -181,58 +140,67 @@ recordBtn.onclick = async function() {
 
     recordBtn.disabled = true;
     stopBtn.disabled = false;
-    downloadBtn.disabled = true;
+    status.textContent = "Recording in progress...";
 
-    statusText.textContent =
-      "Recording Started! Play your Karaoke.";
-
-  } catch(error) {
-
-    statusText.textContent =
-      "Microphone Error: " + error.message;
-
+  } catch (error) {
+    status.textContent =
+      "Microphone error. Please allow microphone permission and try again.";
+    console.error(error);
   }
+}
 
-};
-
-stopBtn.onclick = function() {
-
+function stopRecording() {
   if (recorder && recorder.state === "recording") {
     recorder.stop();
+    recordBtn.disabled = false;
+    stopBtn.disabled = true;
+    status.textContent = "Preparing your recording...";
   }
+}
 
-  recordBtn.disabled = false;
-  stopBtn.disabled = true;
-
-};
-
-downloadBtn.onclick = function() {
-
-  if (!recordingURL) return;
+function saveRecording() {
+  if (!recordingBlob) return;
 
   const link = document.createElement("a");
-
   link.href = recordingURL;
-  link.download = "My-Karaoke-Recording.webm";
-
+  link.download = "my-karaoke-recording.webm";
+  document.body.appendChild(link);
   link.click();
+  link.remove();
 
-};
+  status.textContent = "Download requested. Check your Downloads folder.";
+}
+
+function deleteRecording() {
+  if (!hasRecording) return;
+
+  const answer = confirm(
+    "Are you sure you want to delete your recording?"
+  );
+
+  if (!answer) return;
+
+  playback.pause();
+  playback.removeAttribute("src");
+  playback.load();
+
+  if (recordingURL) URL.revokeObjectURL(recordingURL);
+
+  recordingURL = null;
+  recordingBlob = null;
+  hasRecording = false;
+
+  saveBtn.disabled = true;
+  deleteBtn.disabled = true;
+
+  status.textContent = "Recording deleted.";
+}
+
+recordBtn.onclick = startRecording;
+stopBtn.onclick = stopRecording;
+saveBtn.onclick = saveRecording;
+deleteBtn.onclick = deleteRecording;
 
 </script>
-
 </body>
 </html>
-
-downloadBtn.onclick = () => {
-  const link = document.createElement("a");
-  link.href = playback.src;
-  link.download = "my-recording.webm";
-  link.click();
-};
-</script>
-
-</body>
-</html>
-
-HTML
