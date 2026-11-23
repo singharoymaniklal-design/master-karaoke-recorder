@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Master Karaoke Recorder</title>
+
+<style>
+body {
+  background: #111;
+  color: white;
+  font-family: Arial, sans-serif;
+  text-align: center;
+  padding: 15px;
+}
+h1 { color: gold; }
+
+video {
+  width: 100%;
+  max-width: 600px;
+  border-radius: 10px;
+}
+
+button {
+  padding: 13px 20px;
+  margin: 7px;
+  border: none;
+  border-radius: 7px;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+button:disabled {
+  opacity: 0.45;
+}
+
+#recordBtn { background: #e53935; color: white; }
+#stopBtn { background: #555; color: white; }
+#saveBtn { background: #168a45; color: white; }
+#deleteBtn { background: #b3261e; color: white; }
+
+#status {
+  color: gold;
+  margin: 18px;
+}
+
+audio {
+  width: 100%;
+  margin-top: 15px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>MASTER KARAOKE RECORDER</h1>
+
+<p>Play your karaoke and record your voice.</p>
+
+<video id="karaoke" controls playsinline muted>
+  <source src="MUSIC TRACK_20261109_183010_0000.mp4"
+          type="video/mp4">
+  Your browser does not support video.
+</video>
+
+<audio id="instrumental" preload="auto">
+  <source src="MUSIC%20TRACK.mp3" type="audio/mpeg">
+</audio>
+
+<br><br>
+
+<button id="recordBtn">[x]  RECORD</button>
+<button id="stopBtn" disabled>■ STOP</button>
+
+<p id="status">Ready to record your performance.</p>
+
+<h3>Your Recording</h3>
+
+<audio id="playback" controls></audio>
+
+<br>
+
+<button id="saveBtn" disabled>⬇ SAVE RECORDING</button>
+<button id="deleteBtn" disabled>DELETE</button>
+
+<script>
+
+const video = document.getElementById("karaoke");
+const instrumental = document.getElementById("instrumental");
+
+const recordBtn = document.getElementById("recordBtn");
+const stopBtn = document.getElementById("stopBtn");
+const saveBtn = document.getElementById("saveBtn");
+const deleteBtn = document.getElementById("deleteBtn");
+
+const playback = document.getElementById("playback");
+const status = document.getElementById("status");
+
+let recorder = null;
+let micStream = null;
+let micSource = null;
+
+let audioContext = null;
+let musicSource = null;
+let recordingDestination = null;
+
+let recordingBlob = null;
+let recordingURL = null;
+
+let hasRecording = false;
+let recordingSaved = false;
+
+
+// AUDIO SYSTEM
+
+async function setupAudio() {
+
+  if (!audioContext) {
+
+    const AudioContextClass =
+      window.AudioContext || window.webkitAudioContext;
+
+    audioContext = new AudioContextClass();
+
+    recordingDestination =
+      audioContext.createMediaStreamDestination();
+
+    musicSource =
+      audioContext.createMediaElementSource(instrumental);
+
+    musicSource.connect(audioContext.destination);
+
+    musicSource.connect(recordingDestination);
+  }
+
+  if (audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
+}
+
+
+// PLAY KARAOKE AND INSTRUMENTAL
+
+video.addEventListener("play", async () => {
+
+  try {
+
+    await setupAudio();
+
+    instrumental.currentTime = video.currentTime;
+
+    await instrumental.play();
+
+    status.textContent = "Instrumental music playing.";
+
+  } catch (error) {
+
+    status.textContent =
+      "Instrumental playback error. Please check the music file.";
+
+    console.error(error);
+  }
+
+});
+
+
+video.addEventListener("pause", () => {
+  instrumental.pause();
+});
+
+
+video.addEventListener("seeking", () => {
+  instrumental.pause();
+});
+
+
+video.addEventListener("seeked", async () => {
+
+  if (!video.paused) {
+
+    try {
+      instrumental.currentTime = video.currentTime;
+      await instrumental.play();
+    } catch (error) {
+      console.error(error);
+    }
+
+  }
+
+});
+
+
+video.addEventListener("ended", () => {
+  instrumental.pause();
+  instrumental.currentTime = 0;
+});
+
+
+// START RECORDING
+
+async function startRecording() {
+
+  if (recorder && recorder.state === "recording") {
+    return;
+  }
+
+  if (hasRecording && !recordingSaved) {
+
+    const answer = confirm(
+      "Your previous recording is not saved. Start a new recording and lose the previous one?"
+    );
+
+    if (!answer) return;
+  }
+
+  try {
+
+    await setupAudio();
+
+    micStream =
+      await navigator.mediaDevices.getUserMedia({
+        audio: true
+      });
+
+    micSource =
+      audioContext.createMediaStreamSource(micStream);
+
+    micSource.connect(recordingDestination);
+
+    const mimeType = [
+      "audio/webm;codecs=opus",
+      "audio/webm"
+    ].find(type => MediaRecorder.isTypeSupported(type));
+
+    recorder = new MediaRecorder(
+      recordingDestination.stream,
+      mimeType ? { mimeType } : {}
+    );
+
+    const chunks = [];
+
+    recorder.ondataavailable = event => {
+
+      if (event.data.size > 0) {
+        chunks.push(event.data);
+      }
+
+    };
+
+
+    recorder.onstop = () => {
+
+      recordingBlob = new Blob(chunks, {
+        type: recorder.mimeType || "audio/webm"
+      });
+
+      if (recordingURL) {
+        URL.revokeObjectURL(recordingURL);
+      }
+
+      recordingURL =
+        URL.createObjectURL(recordingBlob);
+
+      playback.src = recordingURL;
+
+      hasRecording = true;
+      recordingSaved = false;
+
+      saveBtn.disabled = false;
+      deleteBtn.disabled = false;
+
+      status.textContent =
+        "Recording ready. Listen or save it.";
+
+      if (micSource) {
+        micSource.disconnect();
+        micSource = null;
+      }
+
+      if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+        micStream = null;
+      }
+
+    };
+
+
+    recorder.start();
+
+    recordBtn.disabled = true;
+    stopBtn.disabled = false;
+
+    status.textContent = "Recording in progress...";
+
+  } catch (error) {
+
+    status.textContent =
+      "Microphone error. Please allow microphone permission and try again.";
+
+    console.error(error);
+
+    if (micStream) {
+      micStream.getTracks().forEach(track => track.stop());
+      micStream = null;
+    }
+
+  }
+
+}
+
+
+// STOP RECORDING
+
+function stopRecording() {
+
+  if (recorder && recorder.state === "recording") {
+
+    recorder.stop();
+
+    recordBtn.disabled = false;
+    stopBtn.disabled = true;
+
+    status.textContent =
+      "Preparing your recording...";
+
+  }
+
+}
+
+
+// SAVE RECORDING
+
+function saveRecording() {
+
+  if (!recordingBlob) return;
+
+  const link = document.createElement("a");
+
+  link.href = recordingURL;
+
+  link.download = "my-karaoke-recording.webm";
+
+  document.body.appendChild(link);
+
+  link.click();
+
+  link.remove();
+
+  recordingSaved = true;
+
+  status.textContent =
+    "Download requested. Check your Downloads folder.";
+
+}
+
+
+// DELETE RECORDING
+
+function deleteRecording() {
+
+  if (!hasRecording) return;
+
+  const answer = confirm(
+    "Are you sure you want to delete your recording?"
+  );
+
+  if (!answer) return;
+
+  playback.pause();
+  playback.removeAttribute("src");
+  playback.load();
+
+  if (recordingURL) {
+    URL.revokeObjectURL(recordingURL);
+  }
+
+  recordingURL = null;
+  recordingBlob = null;
+
+  hasRecording = false;
+  recordingSaved = false;
+
+  saveBtn.disabled = true;
+  deleteBtn.disabled = true;
+
+  status.textContent = "Recording deleted.";
+
+}
+
+
+// BUTTON ACTIONS
+
+recordBtn.onclick = startRecording;
+stopBtn.onclick = stopRecording;
+saveBtn.onclick = saveRecording;
+deleteBtn.onclick = deleteRecording;
+
+
+// MUSIC ERROR
+
+instrumental.addEventListener("error", () => {
+
+  status.textContent =
+    "Instrumental file could not be loaded. Please check its filename.";
+
+});
+
+</script>
+
+</body>
+</html>
