@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,9 +31,7 @@ button {
   font-weight: bold;
 }
 
-button:disabled {
-  opacity: 0.45;
-}
+button:disabled { opacity: 0.45; }
 
 #recordBtn { background: #e53935; color: white; }
 #stopBtn { background: #555; color: white; }
@@ -54,7 +53,6 @@ audio {
 <body>
 
 <h1>MASTER KARAOKE RECORDER</h1>
-
 <p>Play your karaoke and record your voice.</p>
 
 <video id="karaoke" controls playsinline muted>
@@ -69,8 +67,8 @@ audio {
 
 <br><br>
 
-<button id="recordBtn">[x]  RECORD</button>
-<button id="stopBtn" disabled>■ STOP</button>
+<button id="recordBtn">RECORD</button>
+<button id="stopBtn" disabled>STOP</button>
 
 <p id="status">Ready to record your performance.</p>
 
@@ -80,7 +78,7 @@ audio {
 
 <br>
 
-<button id="saveBtn" disabled>⬇ SAVE RECORDING</button>
+<button id="saveBtn" disabled>DOWNLOAD RECORDING</button>
 <button id="deleteBtn" disabled>DELETE</button>
 
 <script>
@@ -99,7 +97,6 @@ const status = document.getElementById("status");
 let recorder = null;
 let micStream = null;
 let micSource = null;
-
 let audioContext = null;
 let musicSource = null;
 let recordingDestination = null;
@@ -129,7 +126,6 @@ async function setupAudio() {
       audioContext.createMediaElementSource(instrumental);
 
     musicSource.connect(audioContext.destination);
-
     musicSource.connect(recordingDestination);
   }
 
@@ -144,51 +140,41 @@ async function setupAudio() {
 video.addEventListener("play", async () => {
 
   try {
-
     await setupAudio();
 
     instrumental.currentTime = video.currentTime;
-
     await instrumental.play();
 
     status.textContent = "Instrumental music playing.";
 
   } catch (error) {
-
     status.textContent =
       "Instrumental playback error. Please check the music file.";
-
     console.error(error);
   }
 
 });
 
-
 video.addEventListener("pause", () => {
   instrumental.pause();
 });
-
 
 video.addEventListener("seeking", () => {
   instrumental.pause();
 });
 
-
 video.addEventListener("seeked", async () => {
 
   if (!video.paused) {
-
     try {
       instrumental.currentTime = video.currentTime;
       await instrumental.play();
     } catch (error) {
       console.error(error);
     }
-
   }
 
 });
-
 
 video.addEventListener("ended", () => {
   instrumental.pause();
@@ -200,9 +186,7 @@ video.addEventListener("ended", () => {
 
 async function startRecording() {
 
-  if (recorder && recorder.state === "recording") {
-    return;
-  }
+  if (recorder && recorder.state === "recording") return;
 
   if (hasRecording && !recordingSaved) {
 
@@ -240,13 +224,8 @@ async function startRecording() {
     const chunks = [];
 
     recorder.ondataavailable = event => {
-
-      if (event.data.size > 0) {
-        chunks.push(event.data);
-      }
-
+      if (event.data.size > 0) chunks.push(event.data);
     };
-
 
     recorder.onstop = () => {
 
@@ -258,9 +237,7 @@ async function startRecording() {
         URL.revokeObjectURL(recordingURL);
       }
 
-      recordingURL =
-        URL.createObjectURL(recordingBlob);
-
+      recordingURL = URL.createObjectURL(recordingBlob);
       playback.src = recordingURL;
 
       hasRecording = true;
@@ -270,7 +247,7 @@ async function startRecording() {
       deleteBtn.disabled = false;
 
       status.textContent =
-        "Recording ready. Listen or save it.";
+        "Recording ready. Listen or download it.";
 
       if (micSource) {
         micSource.disconnect();
@@ -283,7 +260,6 @@ async function startRecording() {
       }
 
     };
-
 
     recorder.start();
 
@@ -303,9 +279,7 @@ async function startRecording() {
       micStream.getTracks().forEach(track => track.stop());
       micStream = null;
     }
-
   }
-
 }
 
 
@@ -320,37 +294,30 @@ function stopRecording() {
     recordBtn.disabled = false;
     stopBtn.disabled = true;
 
-    status.textContent =
-      "Preparing your recording...";
-
+    status.textContent = "Preparing your recording...";
   }
-
 }
 
 
-// SAVE RECORDING
+// DOWNLOAD RECORDING
 
 function saveRecording() {
 
-  if (!recordingBlob) return;
+  if (!recordingBlob || !recordingURL) return;
 
   const link = document.createElement("a");
 
   link.href = recordingURL;
-
-  link.download = "my-karaoke-recording.webm";
+  link.download = "My-Karaoke-Recording.webm";
 
   document.body.appendChild(link);
-
   link.click();
-
   link.remove();
 
   recordingSaved = true;
 
   status.textContent =
     "Download requested. Check your Downloads folder.";
-
 }
 
 
@@ -384,7 +351,6 @@ function deleteRecording() {
   deleteBtn.disabled = true;
 
   status.textContent = "Recording deleted.";
-
 }
 
 
