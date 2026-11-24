@@ -61,10 +61,6 @@ audio {
   Your browser does not support video.
 </video>
 
-<audio id="instrumental" controls preload="auto">
-  <source src="MUSIC%20TRACK.mp3" type="audio/mpeg">
-</audio>
-
 <br><br>
 
 <button id="recordBtn">RECORD</button>
@@ -84,7 +80,6 @@ audio {
 <script>
 
 const video = document.getElementById("karaoke");
-const instrumental = document.getElementById("instrumental");
 
 const recordBtn = document.getElementById("recordBtn");
 const stopBtn = document.getElementById("stopBtn");
@@ -94,16 +89,13 @@ const deleteBtn = document.getElementById("deleteBtn");
 const playback = document.getElementById("playback");
 const status = document.getElementById("status");
 
-let recorder = null;
-let micStream = null;
-let micSource = null;
 let audioContext = null;
-let musicSource = null;
-
-let musicGain = null;
-let micGain = null;
+let videoSource = null;
+let micSource = null;
+let micStream = null;
 let recordingDestination = null;
 
+let recorder = null;
 let recordingBlob = null;
 let recordingURL = null;
 
@@ -111,7 +103,7 @@ let hasRecording = false;
 let recordingSaved = false;
 
 
-// AUDIO MIXER SETUP
+// AUDIO SYSTEM
 
 async function setupAudio() {
 
@@ -125,25 +117,18 @@ async function setupAudio() {
     recordingDestination =
       audioContext.createMediaStreamDestination();
 
-    // INSTRUMENTAL MUSIC SOURCE
+    // VIDEO AUDIO SOURCE
 
-    musicSource =
-      audioContext.createMediaElementSource(instrumental);
+    videoSource =
+      audioContext.createMediaElementSource(video);
 
-    musicGain = audioContext.createGain();
-    musicGain.gain.value = 1;
+    // Send video music to speakers
 
-    musicSource.connect(musicGain);
+    videoSource.connect(audioContext.destination);
 
-    // Hear music through speakers
-    musicGain.connect(audioContext.destination);
+    // Send video music to recording
 
-    // Send music to recording
-    musicGain.connect(recordingDestination);
-
-    // MICROPHONE GAIN
-    micGain = audioContext.createGain();
-    micGain.gain.value = 1;
+    videoSource.connect(recordingDestination);
   }
 
   if (audioContext.state === "suspended") {
@@ -152,72 +137,32 @@ async function setupAudio() {
 }
 
 
-// PLAY KARAOKE AND INSTRUMENTAL
+// VIDEO PLAY STATUS
 
 video.addEventListener("play", async () => {
 
   try {
-
     await setupAudio();
 
-    instrumental.currentTime = video.currentTime;
-
-    await instrumental.play();
-
     status.textContent =
-      "Instrumental music playing.";
+      recorder && recorder.state === "recording"
+      ? "Recording music and voice..."
+      : "Karaoke music playing.";
 
   } catch (error) {
 
-    status.textContent =
-      "Instrumental playback error. Check the music file.";
-
     console.error(error);
+
+    status.textContent = "Audio playback error.";
+
   }
 
 });
 
-
-video.addEventListener("pause", () => {
-  instrumental.pause();
-});
-
-
-video.addEventListener("seeking", () => {
-  instrumental.pause();
-});
-
-
-video.addEventListener("seeked", async () => {
-
-  if (!video.paused) {
-
-    try {
-
-      instrumental.currentTime = video.currentTime;
-
-      await instrumental.play();
-
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
-});
-
-
-video.addEventListener("ended", () => {
-
-  instrumental.pause();
-  instrumental.currentTime = 0;
-
-});
-
-
-instrumental.addEventListener("error", () => {
+video.addEventListener("error", () => {
 
   status.textContent =
-    "Instrumental file could not be loaded. Check its filename.";
+    "Video file could not be loaded. Check its filename.";
 
 });
 
@@ -251,27 +196,9 @@ async function startRecording() {
     micSource =
       audioContext.createMediaStreamSource(micStream);
 
-    // ADD MICROPHONE TO SAME RECORDING MIXER
+    // MIX MICROPHONE WITH VIDEO MUSIC
 
-    micSource.connect(micGain);
-    micGain.connect(recordingDestination);
-
-    // KEEP MUSIC SYNCHRONIZED IF VIDEO IS PLAYING
-
-    if (!video.paused) {
-
-      instrumental.currentTime = video.currentTime;
-
-      await instrumental.play();
-    }
-
-    // CHECK RECORDING AUDIO TRACK
-
-    const mixedStream = recordingDestination.stream;
-
-    if (mixedStream.getAudioTracks().length === 0) {
-      throw new Error("No recording audio track available.");
-    }
+    micSource.connect(recordingDestination);
 
     const mimeType = [
       "audio/webm;codecs=opus",
@@ -279,7 +206,7 @@ async function startRecording() {
     ].find(type => MediaRecorder.isTypeSupported(type));
 
     recorder = new MediaRecorder(
-      mixedStream,
+      recordingDestination.stream,
       mimeType ? { mimeType } : {}
     );
 
@@ -293,7 +220,6 @@ async function startRecording() {
 
     };
 
-
     recorder.onstop = () => {
 
       recordingBlob = new Blob(chunks, {
@@ -304,7 +230,8 @@ async function startRecording() {
         URL.revokeObjectURL(recordingURL);
       }
 
-      recordingURL = URL.createObjectURL(recordingBlob);
+      recordingURL =
+        URL.createObjectURL(recordingBlob);
 
       playback.src = recordingURL;
 
@@ -316,8 +243,6 @@ async function startRecording() {
 
       status.textContent =
         "Recording ready. Listen or download it.";
-
-      // DISCONNECT MICROPHONE
 
       if (micSource) {
         micSource.disconnect();
@@ -331,7 +256,6 @@ async function startRecording() {
 
     };
 
-
     recorder.onerror = event => {
 
       console.error(event);
@@ -340,21 +264,20 @@ async function startRecording() {
 
     };
 
-
     recorder.start();
 
     recordBtn.disabled = true;
     stopBtn.disabled = false;
 
     status.textContent =
-      "Recording in progress. Music and voice are being recorded.";
+      "Recording started. Now play your karaoke video.";
 
   } catch (error) {
 
-    status.textContent =
-      "Recording error. Check microphone and music permissions.";
-
     console.error(error);
+
+    status.textContent =
+      "Microphone error. Please allow microphone permission.";
 
     if (micSource) {
       micSource.disconnect();
