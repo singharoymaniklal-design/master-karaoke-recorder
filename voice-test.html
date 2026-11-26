@@ -1,0 +1,175 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voice Test Recorder</title>
+
+<style>
+body {
+  background: #111;
+  color: white;
+  font-family: Arial, sans-serif;
+  text-align: center;
+  padding: 20px;
+}
+h1 { color: gold; }
+button {
+  padding: 14px 22px;
+  margin: 8px;
+  border: none;
+  border-radius: 7px;
+  font-size: 16px;
+  font-weight: bold;
+}
+#recordBtn { background: #e53935; color: white; }
+#stopBtn { background: #555; color: white; }
+#saveBtn { background: #168a45; color: white; }
+button:disabled { opacity: 0.4; }
+#status { color: gold; margin: 20px; }
+audio { width: 100%; margin-top: 20px; }
+</style>
+</head>
+
+<body>
+
+<h1>VOICE TEST RECORDER</h1>
+<p>Record your voice without instrumental music.</p>
+
+<button id="recordBtn">RECORD</button>
+<button id="stopBtn" disabled>STOP</button>
+
+<p id="status">Ready to record.</p>
+
+<h3>Your Voice Recording</h3>
+<audio id="playback" controls></audio>
+
+<br>
+
+<button id="saveBtn" disabled>DOWNLOAD RECORDING</button>
+
+<script>
+
+const recordBtn = document.getElementById("recordBtn");
+const stopBtn = document.getElementById("stopBtn");
+const saveBtn = document.getElementById("saveBtn");
+const playback = document.getElementById("playback");
+const status = document.getElementById("status");
+
+let micStream = null;
+let recorder = null;
+let recordingBlob = null;
+let recordingURL = null;
+
+async function startRecording() {
+
+  try {
+
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: true
+    });
+
+    let mimeType = [
+      "audio/webm;codecs=opus",
+      "audio/webm"
+    ].find(type => MediaRecorder.isTypeSupported(type));
+
+    recorder = new MediaRecorder(
+      micStream,
+      mimeType ? { mimeType } : {}
+    );
+
+    let chunks = [];
+
+    recorder.ondataavailable = event => {
+      if (event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+
+    recorder.onstop = () => {
+
+      recordingBlob = new Blob(chunks, {
+        type: recorder.mimeType || "audio/webm"
+      });
+
+      if (recordingURL) {
+        URL.revokeObjectURL(recordingURL);
+      }
+
+      recordingURL = URL.createObjectURL(recordingBlob);
+
+      playback.src = recordingURL;
+      saveBtn.disabled = false;
+
+      if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+        micStream = null;
+      }
+
+      status.textContent = "Recording ready. Listen now.";
+
+    };
+
+    recorder.start();
+
+    recordBtn.disabled = true;
+    stopBtn.disabled = false;
+
+    status.textContent = "Recording your voice...";
+
+  } catch (error) {
+
+    console.error(error);
+
+    status.textContent =
+      "Microphone error: " + error.message;
+
+    if (micStream) {
+      micStream.getTracks().forEach(track => track.stop());
+      micStream = null;
+    }
+
+    recordBtn.disabled = false;
+    stopBtn.disabled = true;
+
+  }
+}
+
+function stopRecording() {
+
+  if (recorder && recorder.state === "recording") {
+    recorder.stop();
+    recordBtn.disabled = false;
+    stopBtn.disabled = true;
+    status.textContent = "Preparing recording...";
+  }
+
+}
+
+function saveRecording() {
+
+  if (!recordingBlob) return;
+
+  const link = document.createElement("a");
+
+  link.href = recordingURL;
+  link.download = "Voice-Test-Recording.webm";
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  status.textContent = "Download requested.";
+
+}
+
+recordBtn.onclick = startRecording;
+stopBtn.onclick = stopRecording;
+saveBtn.onclick = saveRecording;
+
+</script>
+
+</body>
+</html>
